@@ -1,12 +1,12 @@
 `define CALC_QOS 0
-`define OPERATE 1
+`define SELECT_STREAM 1
+`define OPERATE 2
 
 module stream_arbiter #(
   parameter  T_DATA_WIDTH = 8,
              T_QOS__WIDTH = 4,
              STREAM_COUNT = 2,
   localparam T_ID___WIDTH = $clog2(STREAM_COUNT)
-  
 )(
   input logic clk,
   input logic rst_n,
@@ -25,72 +25,81 @@ module stream_arbiter #(
   input logic m_ready_i
 );
 
+logic [1:0] state;
+logic can_calc;
+logic [T_QOS__WIDTH-1:0] qos;
+logic [$clog2(STREAM_COUNT):0] index;
+logic [STREAM_COUNT-1:0] served;
+logic [T_ID___WIDTH-1:0] curr_stream;
+logic [T_QOS__WIDTH-1:0] curr_qos;
 
-
-logic state;//СЃРѕСЃС‚РѕСЏРЅРёРµ Р°РІС‚РѕРјР°С‚Р°
-logic locked;//С„Р»Р°Рі С„РёРєСЃР°С†РёРё РїРѕС‚РѕРєР° РґРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ С‚СЂР°РЅР·Р°РєС†РёРё
-logic can_calc;//С„Р»Р°Рі, СЂР°Р·СЂРµС€Р°СЋС‰РёР№ РїРµСЂРµСЃС‡С‘С‚ РјР°РєСЃРёРјР°Р»СЊРЅРѕРіРѕ РїСЂРёРѕСЂРёС‚РµС‚Р°
-logic [T_QOS__WIDTH-1:0] max_qos;//РјР°РєСЃРёРјР°Р»СЊРЅС‹Р№ РїСЂРёРѕСЂРёС‚РµС‚
-logic [STREAM_COUNT-1:0] served;//РјР°СЃСЃРёРІ С„Р»Р°РіРѕРІ, РѕР±РѕР·РЅР°С‡Р°СЋС‰РёС…, Р±С‹Р» Р»Рё РѕР±СЃР»СѓР¶РµРЅ РєР°РєРѕР№-Р»РёР±Рѕ РїРѕС‚РѕРє
-logic [T_ID___WIDTH-1:0] curr_stream;//РёРЅРґРµРєСЃ РїРѕС‚РѕРєР°, РІС‹Р±СЂР°РЅРЅРѕРіРѕ РґР»СЏ РІС‹РІРѕРґР° РґР°РЅРЅС‹С…
- 
 assign m_last_o = s_last_i[curr_stream];
-assign m_qos_o = s_qos_i[curr_stream];
 
-comparator#(T_QOS__WIDTH,STREAM_COUNT) comp(clk, rst_n, can_calc, s_qos_i, s_valid_i, served, max_qos);
+comparator#(T_QOS__WIDTH,STREAM_COUNT) comp(clk, rst_n, can_calc, s_qos_i, s_valid_i, served, qos, index);
 
 always@(posedge clk, posedge rst_n) begin
     if(rst_n)begin
-        locked      <= 0;
         served      <= 0;
         state       <= 0;
         s_ready_o   <= 0;
         m_valid_o   <= 0;
         can_calc    <= 1;
+        curr_stream <= 0;
+        curr_qos    <= 0;
     end
     
     else begin
         case(state)
-            `CALC_QOS: begin
-                state 		<= 1;
-                m_valid_o 	<= 0;//РІС‹С…РѕРґРЅС‹Рµ РґР°РЅРЅС‹Рµ РѕР±РѕР·РЅР°С‡Р°СЋС‚СЃСЏ РєР°Рє РЅРµРґРµР№СЃС‚РІРёС‚РµР»СЊРЅС‹Рµ
-                can_calc 	<= 0;
+            `CALC_QOS: begin//состояние сравнения приоритетов компаратором
+                state <= `SELECT_STREAM;
+                m_valid_o <= 0;//выходные данные обозначаются как недействительные
+                can_calc <= 0;//компаратор больше не может сравнивать приоритеты
             end
             
-            `OPERATE: begin
-                if(!locked)begin//РІС‹Р±РѕСЂ РїРѕС‚РѕРєР° РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСЂРѕРёР·РІРµРґС‘РЅ С‚РѕР»СЊРєРѕ РІРЅРµ РїРµСЂРµРґР°С‡Рё С‚СЂР°РЅР·Р°РєС†РёРё
-                    for(int i=0; i<STREAM_COUNT; i++)begin
-                        if(s_valid_i[i] & !served[i] & ((s_qos_i[i] == max_qos) | (s_qos_i[i] == 0)))begin
-                            m_id_o      <= i;
-                            curr_stream <= i;
-                            m_data_o    <= s_data_i[i];
-                            locked      <= 1;
-                            m_valid_o   <= 1;//РІС‹С…РѕРґРЅС‹Рµ РґР°РЅРЅС‹Рµ РѕР±РѕР·РЅР°С‡Р°СЋС‚СЃСЏ РєР°Рє РґРµР№СЃС‚РІРёС‚РµР»СЊРЅС‹Рµ
-                            s_ready_o[i]<= 1;//СѓСЃС‚СЂРѕР№СЃС‚РІРѕ РіРѕС‚РѕРІРѕ РїСЂРёРЅРёРјР°С‚СЊ РїР°РєРµС‚С‹ СЃ СЌС‚РѕРіРѕ РїРѕС‚РѕРєР°
-                            served[i]   <= 1;//РїРѕС‚РѕРє РѕР±РѕР·РЅР°С‡Р°РµС‚СЃСЏ РєР°Рє РѕР±СЃР»СѓР¶РµРЅРЅС‹Р№
-                            break;
-                        end
+            `SELECT_STREAM: begin//состояние выбора потока
+                if(index != STREAM_COUNT) begin
+                    if(s_valid_i[index]) begin
+                        state <= `OPERATE;
+                        //фиксируются номер и приоритет потока
+                        curr_stream <= index;
+                        curr_qos <= qos;
+                    end
+                    
+                    else begin//выбранный поток в последний момент оказался невалидным
+                        state <= `CALC_QOS;
+                        can_calc <= 1;//компаратор может начать сравнивать приоритеты
                     end
                 end
                 
-                else begin
-                    m_data_o <= s_data_i[curr_stream];
-                    if(s_last_i[curr_stream])begin
-                        locked <= 0;//С‚СЂР°РЅР·Р°РєС†РёСЏ РїРµСЂРµРґР°РЅР° Рё Р±Р»РѕРєРёСЂРѕРІРєР° СЃРЅСЏС‚Р°
-                        s_ready_o[curr_stream] <= 0;//СѓСЃС‚СЂРѕР№СЃС‚РІРѕ РЅРµ РіРѕС‚РѕРІРѕ РїСЂРёРЅРёРјР°С‚СЊ РїР°РєРµС‚С‹ СЃ СЌС‚РѕРіРѕ РїРѕС‚РѕРєР°
-                        can_calc <= 1;
-                        state <= `CALC_QOS;
-                        if(s_valid_i ^ served == 0) served <= 0;
-								//РµСЃР»Рё РІСЃРµ РїРѕС‚РѕРєРё, РїРµСЂРµРґР°СЋС‰РёРµ РґР°РЅРЅС‹Рµ, СѓР¶Рµ Р±С‹Р»Рё РѕР±СЃР»СѓР¶РµРЅС‹, С†РёРєР» РІС‹Р±РѕСЂР° РїРѕС‚РѕРєРѕРІ СЃР±СЂР°СЃС‹РІР°РµС‚СЃСЏ
-								//Рё РїРѕС‚РѕРєРё РјРѕРіСѓС‚ Р±С‹С‚СЊ РІС‹Р±СЂР°РЅС‹ Р·Р°РЅРѕРІРѕ
-                    end
+                else begin//найденный компаратором индекс оказался дефолтным,
+                          //следовательно, все потоки были обслужены, а значит, их можно выбрать заново
+                    state <= `CALC_QOS;
+                    can_calc <= 1;//компаратор может начать сравнивать приоритеты
+                    served <= 0;//все потоки заново помечаются как необслуженные
+                end
+            end
+            
+            `OPERATE: begin//состояние передачи данных
+                //если принимающее устройтво готово принимать пакеты и поток валиден
+                if(m_ready_i && s_valid_i[curr_stream]) begin
+                    s_ready_o[curr_stream] <= 1;//устройство готово принимать пакеты с этого потока
+                    m_data_o <= s_data_i[curr_stream];//на выход передаются данные с выбранного потока
+                    m_valid_o <= 1;//выходные данные обозначаются как действительные
+                    m_id_o <= curr_stream;
+                    served[curr_stream] <= 1;//поток обозначается как обслуженный
+                    m_qos_o <= curr_qos;
                     
-                    else begin
-                        for(int j=0; j<STREAM_COUNT; j++) begin
-                            if(!s_valid_i[j]) served[j] <= 0;
-									 //РµСЃР»Рё РґР°РЅРЅС‹Рµ СЃ РїРѕС‚РѕРєР° Р±РѕР»СЊС€Рµ РЅРµ РїРѕСЃС‚СѓРїР°СЋС‚, РѕРЅ РѕР±РѕР·РЅР°С‡Р°РµС‚СЃСЏ РєР°Рє РЅРµРѕР±СЃР»СѓР¶РµРЅРЅС‹Р№
-                        end 
+                    if(s_last_i[curr_stream])begin
+                        can_calc <= 1;//компаратор может начать сравнивать приоритеты
+                        state <= `CALC_QOS;
+                        s_ready_o[curr_stream] <= 0;//устройство не готово принимать пакеты с этого потока
                     end
+                end
+                
+                //если принимающее  устройтво не готово принимать пакеты
+                else begin
+                    s_ready_o[curr_stream] <= 0;//устройство не готово принимать пакеты с этого потока
+                    m_valid_o <= 0;//выходные данные обозначаются как недействительные
                 end
             end
         endcase 
