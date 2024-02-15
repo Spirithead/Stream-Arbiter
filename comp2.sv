@@ -8,7 +8,7 @@ module comp2#(
     input logic  [$clog2(STREAM_COUNT):0] indexX1,
     input logic  [T_QOS__WIDTH-1:0] X2,
     input logic  [$clog2(STREAM_COUNT):0] indexX2,
-    //индексы потоков с нулевым приоритетом (сравниваются отдельно)
+    //РёРЅРґРµРєСЃС‹ РїРѕС‚РѕРєРѕРІ СЃ РЅСѓР»РµРІС‹Рј РїСЂРёРѕСЂРёС‚РµС‚РѕРј (СЃСЂР°РІРЅРёРІР°СЋС‚СЃСЏ РѕС‚РґРµР»СЊРЅРѕ)
     input logic  [$clog2(STREAM_COUNT):0] indexX01,
     input logic  [$clog2(STREAM_COUNT):0] indexX02,
     output logic [T_QOS__WIDTH-1:0] Y,
@@ -24,35 +24,35 @@ always @(rst_n, X1, X2, indexX1, indexX2, indexX01, indexX02) begin
         end
         
         else if(can_calc) begin
-            //если х1 больше х2 или если х1 валиден (в отличие от х2)
+            //РµСЃР»Рё С…1 Р±РѕР»СЊС€Рµ С…2 РёР»Рё РµСЃР»Рё С…1 РІР°Р»РёРґРµРЅ (РІ РѕС‚Р»РёС‡РёРµ РѕС‚ С…2)
             if (X1 >= X2 && (indexX1 != STREAM_COUNT && indexX2 != STREAM_COUNT)
                 || (indexX1 != STREAM_COUNT && indexX2 == STREAM_COUNT)) begin
                 Y = X1;
                 indexY = indexX1;
             end
             
-            //если х2 больше х1 или если х2 валиден (в отличие от х1)
+            //РµСЃР»Рё С…2 Р±РѕР»СЊС€Рµ С…1 РёР»Рё РµСЃР»Рё С…2 РІР°Р»РёРґРµРЅ (РІ РѕС‚Р»РёС‡РёРµ РѕС‚ С…1)
             else if(X1 < X2 && (indexX1 != STREAM_COUNT && indexX2 != STREAM_COUNT)
                 || (indexX1 == STREAM_COUNT && indexX2 != STREAM_COUNT)) begin
                 Y = X2;
                 indexY = indexX2;
             end
             
-            //если ни один поток не валиден
+            //РµСЃР»Рё РЅРё РѕРґРёРЅ РїРѕС‚РѕРє РЅРµ РІР°Р»РёРґРµРЅ
             else begin
                 Y = 0;
                 indexY = STREAM_COUNT;
             end
             
-            ////////////////////////////сравнение индексов нулей
-            if(indexX01 != STREAM_COUNT && indexX02 != STREAM_COUNT) begin//если оба потока валидны
+            ////////////////////////////СЃСЂР°РІРЅРµРЅРёРµ РёРЅРґРµРєСЃРѕРІ РЅСѓР»РµР№
+            if(indexX01 != STREAM_COUNT && indexX02 != STREAM_COUNT) begin//РµСЃР»Рё РѕР±Р° РїРѕС‚РѕРєР° РІР°Р»РёРґРЅС‹
                 if(indexX01 <= indexX02) index0Y = indexX01;
                 else index0Y = indexX02;
             end
             
-            //если только первый поток с нулевым приоритетом валиден
+            //РµСЃР»Рё С‚РѕР»СЊРєРѕ РїРµСЂРІС‹Р№ РїРѕС‚РѕРє СЃ РЅСѓР»РµРІС‹Рј РїСЂРёРѕСЂРёС‚РµС‚РѕРј РІР°Р»РёРґРµРЅ
             else if(indexX01 != STREAM_COUNT) index0Y = indexX01;
-            //если только второй поток с нулевым приоритетом валиден
+            //РµСЃР»Рё С‚РѕР»СЊРєРѕ РІС‚РѕСЂРѕР№ РїРѕС‚РѕРє СЃ РЅСѓР»РµРІС‹Рј РїСЂРёРѕСЂРёС‚РµС‚РѕРј РІР°Р»РёРґРµРЅ
             else if(indexX02 != STREAM_COUNT) index0Y = indexX02;
             else index0Y = STREAM_COUNT;
         end
